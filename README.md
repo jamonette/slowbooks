@@ -44,8 +44,8 @@ data_dir = '/home/billybob/docs/slowbooks-data'
 mj = sb.data.master_journal(data_dir)
 coa = sb.data.chart_of_accounts(data_dir)
 
-range = pd.period_range('20190101', '20200131', freq='M')
-sd = sb.data.statement_data(coa, mj, range)
+period_range = pd.period_range('20190101', '20200131', freq='M')
+sd = sb.data.statement_data(coa, mj, period_range)
 
 # these calls return pandas dataframes, you can use them for whatever
 
@@ -57,7 +57,7 @@ bs = sb.data.balance_sheet(sd)
 
 print(sb.reports.general_ledger(gl))
 print(sb.reports.cash_flow(cf))
-print(sb.reports.balance_sheet(bs)
+print(sb.reports.balance_sheet(bs))
 
 # you can do this too
 

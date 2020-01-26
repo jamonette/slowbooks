@@ -36,7 +36,7 @@ class MatcherPlugin:
                     {'regex': 'credit card autopay', 'col': 3, 'splits': (47, 0)},
                     # more complicated transactions can provide a list of splits, for ex. one debit,
                     # and two credit accounts that split the TX amount 70/30
-                    {'regex': 'CONSERVICE', 'col': 3, 'splits': ['your split objs here']},
+                    {'regex': 'THX FOR UTILITY BILL PAYMENT', 'col': 3, 'splits': ['your split objs here']},
           ]}}
 
          # add additional sets of matchers here to handle additional accounts, or

@@ -71,16 +71,24 @@ def statement_data(chart_of_accounts, master_journal, period_range):
            .pipe(lambda df: df[['period', 'type', 'category', 'account_id', 'account_name', 'date',
                                 'transaction_id', 'net_amount', 'debit_amount', 'credit_amount']]))
 
+    return expand_category_columns(sd)
+
+def expand_category_columns(data):
     # account category is ragged hierarchy spec'd as a ':' delimited text column -
     # split that here and expand it into the corresponding number of columns
-    cat_cols = (sd['category']
+    cat_cols = (data['category']
                  .reset_index(drop=True)
                  .str.split(':', expand=True)
                  .fillna(axis=1, method='pad')
                  .pipe(lambda df: df.rename(lambda col_name: f'category_{col_name}', axis=1)))
 
-    return (sd.join(cat_cols)
-              .rename(columns={'category': 'all_categories'}))
+    return (data.join(cat_cols)
+                .rename(columns={'category': 'all_categories'}))
+
+# this can't be a constant since # of category levels can vary
+def statement_index(stmt_data):
+    category_levels = [c for c in stmt_data.columns if 'category_' in str(c)]
+    return ['period', 'type'] + category_levels + ['account_name']
 
 # sum of ledger entry net amounts for a given account within a given period
 #
@@ -95,9 +103,7 @@ def cash_flow(stmt_data, period_range):
           .pipe(lambda df: df[((df['date'] > start) & (df['date'] <= end)) |
                                (df['date'].isna())]))
 
-    category_levels = [c for c in sd.columns if 'category_' in c]
-    report_index = ['period', 'type'] + category_levels + ['account_name']
-
+    report_index = statement_index(sd)
     return (sd[report_index + ['net_amount']]
               .set_index(report_index, drop=True)
               .groupby(report_index)
@@ -121,9 +127,7 @@ def balance_sheet(stmt_data, period_range):
           # note: allow NaN dates in order to retain (period, account) filler data
           .pipe(lambda df: df[(df['date'] <= end) | df['date'].isna()]))
 
-    category_levels = [c for c in sd.columns if 'category_' in c]
-    report_index = ['period', 'type'] + category_levels + ['account_name']
-
+    report_index = statement_index(stmt_data)
     return (sd
               .set_index(report_index)
               .sort_values(['period', 'date'])

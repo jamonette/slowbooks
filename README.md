@@ -110,7 +110,6 @@ From a usability standpoint.. nobody's got time for that when it take 5 runs to 
 <sup>.. some tests would probably be smart?</sup>
 
 - bank-rec capability
-- budgeting
 - forecasting
 - scenario / sensitivity analysis
 - maybe some fancier types of output

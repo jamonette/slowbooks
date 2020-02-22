@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from argparse import ArgumentParser
-from importer import Importer, TransactionMatcher
+from importer import Importer
 from pathlib import Path
 import importlib.util
 import os
@@ -25,15 +25,15 @@ def main():
     parser.add_argument('--data-dir', default=os.environ.get('SLOWBOOKS_DATA', None))
     args = parser.parse_args()
 
-    data_dir = Path(args.data_dir)
-    if not data_dir.is_dir():
-        print(f'Data dir {data_dir} not found. Exiting')
+    data_dir = Path(args.data_dir) if args.data_dir else None
+    if not data_dir or not data_dir.is_dir():
+        print(f'Data dir [{data_dir}] not found. Exiting')
         sys.exit(1)
 
     if args.action == 'import':
         _get_importer(data_dir).import_transactions()
     elif args.action == 'reimport':
-        _get_importer(data_dir).reimport_transactions(args.files)
+        _get_importer(data_dir).import_transactions(args.files)
     elif args.action == 'post':
         _get_importer(data_dir).post_to_journal()
     elif args.action == 'merge-edits':
@@ -46,18 +46,20 @@ def main():
         raise RuntimeError('Bad command')
 
 def _get_importer(data_dir):
-    matcher_plugin_file = data_dir / 'user_code/matcher_plugin.py'
-    matcher_plugin = None
+    parser_plugin_file = data_dir / 'user_code/parser_plugin.py'
+    parser_plugin = None
     try:
-        spec = importlib.util.spec_from_file_location('matcher_plugin', matcher_plugin_file)
+        spec = importlib.util.spec_from_file_location('parser_plugin', parser_plugin_file)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        matcher_plugin = module.MatcherPlugin()
+        parser_plugin = module.ParserPlugin()
     except Exception as e:
-        print(f'Failed to load plugin from {matcher_plugin_file}, using defaults.\n{str(e)}')
+        print(f'Failed to load plugin from {parser_plugin_file}:')
+        print(e)
+        print('Continuing import with no user code.')
 
     return Importer(data_dir=data_dir,
-                    transaction_matcher=TransactionMatcher(matcher_plugin))
+                    parser_plugin=parser_plugin)
 
 if __name__ == '__main__':
     main()

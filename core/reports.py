@@ -9,7 +9,7 @@ def general_ledger(journal_by_account):
     output = []
     for acct_name, ledgers in journal_by_account.items():
         header = f'{acct_name}\n{"-" * len(acct_name)}'
-        ledgers = as_columns([ledgers['debit'].to_string(), ledgers['credit'].to_string()])
+        ledgers = as_columns(ledgers['debit'], ledgers['credit'])
         output.append(''.join([header, ledgers, '\n\n']))
 
     return ''.join(output)
@@ -43,6 +43,8 @@ def cash_flow(cf_data):
 
     # sanity check: (FCF to equity - cash flow into assets) should equal zero
     err = (free_cf_to_equity - assets.groupby('period').sum().T)
+
+    # TODO Net Income / FCFTE calc is erroneous
 
     return f"""\
         Income
@@ -117,7 +119,11 @@ def with_total_row(df):
 #### Plaintext / CLI Formatters ###########################################
 ###########################################################################
 
-def as_columns(text_blocks, spacing='  |  '):
+def as_columns(*inputs, spacing='  |  '):
+    # allow caller to pass in raw pandas objects without calling their
+    # special `to_string` method
+    text_blocks = [i.to_string() if getattr(i, 'to_string', None) else i for i in inputs]
+
     text_blocks_as_line_lists = [tb.split('\n') for tb in text_blocks]
     max_widths = [max([len(line) for line in line_list]) for line_list in text_blocks_as_line_lists]
 

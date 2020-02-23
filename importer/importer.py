@@ -1,5 +1,5 @@
 from .datatypes import JournalEntry, Metadata
-from core.io import CHART_OF_ACCOUNTS_PATH, MASTER_JOURNAL_PATH, METADATA_PATH
+from core.data import CHART_OF_ACCOUNTS_PATH, MASTER_JOURNAL_PATH, METADATA_PATH
 from pathlib import Path
 import csv
 import functools

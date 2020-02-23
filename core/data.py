@@ -187,46 +187,29 @@ def balance_sheet(stmt_data, period_range):
 
 def infer_gains(coa, mj, stmt_data, balance_data_raw, period_range):
 
-    balance_data = (balance_data_raw.groupby('account_name')
-                    .apply(lambda df: df.reset_index()
-                           .set_index('period')
-                           .reindex(period_range)
-                           .rename_axis('period')
-                           .interpolate(method='linear')
-                           )
-                    .pipe(lambda df: df.loc[df.index.get_level_values('period') >= period_range[0]]))
-
     bs = balance_sheet(stmt_data, period_range)
-    balance_diff = (bs.join(balance_data, how='left')
-                    .pipe(lambda df: df.replace({col: {0: np.nan} for col in df.columns if col != 'account_id'}))
-                    .assign(balance_change=lambda df: df['balance'].diff())
-                    .assign(contrib=lambda df: df['bs_amount'].diff())
-                    .assign(gain=lambda df: df['balance_change'] - df['contrib']))
+    balance_diff =\
+        (balance_data_raw
+         .groupby('account_name')
+         .apply(lambda df: df.reset_index()
+                .set_index('period')
+                .reindex(period_range)
+                .rename_axis('period'))
+         .pipe(lambda df: df.loc[df.index.get_level_values('period') >= period_range[0]])
+         .join(bs, how='right')
+         .pipe(lambda df: df.replace({col: {0: np.nan} for col in df.columns if col != 'account_id'}))
+         .drop(columns=['account_name'])
+         .groupby(level='account_name')
+         .apply(lambda df: (df.assign(diff_vs_actual=lambda df: df['balance'] - df['bs_amount'])
+                              .assign(diff_vs_actual_interp=lambda df: df['diff_vs_actual'].interpolate(method='linear'))
+                              .assign(gain=lambda df: df['diff_vs_actual_interp'].diff()))))
 
-    journal_template = (balance_diff.drop(columns=['account_name']).reset_index().dropna()
+    journal_template = (balance_diff
+                        .reset_index()
                         .assign(date=lambda df: df['period'].dt.to_timestamp())
                         .assign(transaction_id=DUMMY_TRANSACTION_ID))
 
-    offsets_template = (bs.join(balance_data_raw, how='left')
-                        .reset_index()
-                        .groupby('account_name')
-                        .apply(_diff_first_balance_vs_bs)
-                        .droplevel(0)  # account name was already in index
-                        .assign(date=lambda df: df['period'].dt.to_timestamp())
-                        .assign(transaction_id=DUMMY_TRANSACTION_ID)  # TODO
-                        .assign(description='Adjust to initial account balance value')
-                        .assign(gain=lambda df: df['bs_diff_vs_bal']))
-
     gain_entries = [
-            offsets_template
-                # TODO: does this hold for liability accounts as well?
-                .assign(account_name='unrealized gains')
-                .assign(action=lambda df: np.where(df['gain'] >= 0, 'credit', 'debit'))
-                .assign(amount=lambda df: df['gain'].abs()),
-            offsets_template
-                # TODO: does this hold for liability accounts as well?
-                .assign(action=lambda df: np.where(df['gain'] >= 0, 'debit', 'credit'))
-                .assign(amount=lambda df: df['gain'].abs()),
             journal_template
                 # TODO: does this hold for liability accounts as well?
                 .assign(action=lambda df: np.where(df['gain'] >= 0, 'debit', 'credit'))

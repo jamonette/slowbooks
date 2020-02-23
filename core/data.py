@@ -223,9 +223,12 @@ def infer_gains(coa, mj, stmt_data, balance_data_raw, period_range):
                 .assign(amount=lambda df: df['gain'].abs())
     ]
 
-    entries = pd.concat(gain_entries).reset_index().drop(columns=['type', 'category_0', 'category_1', 'account_id'])
-    gain_journal = enrich_journal(coa, entries, join_key='account_name')
-    mj_with_gains = pd.concat([mj, gain_journal])
+    mj_with_gains = (pd.concat(gain_entries)
+                     .dropna(subset=['amount'])
+                     .reset_index()
+                     .drop(columns=['type', 'category_0', 'category_1', 'account_id'])
+                     .pipe(lambda df: enrich_journal(coa, df, join_key='account_name'))
+                     .pipe(lambda df: pd.concat([mj, df])))
 
     return mj_with_gains, balance_diff
 

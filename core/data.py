@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 
@@ -23,6 +24,7 @@ def fetch_chart_of_accounts(data_dir):
     return (raw_coa
             .join(cat_cols)
             .drop(columns=['category'])
+            .replace({'account_tags': {np.nan: ''}})
             .rename(columns={'id': 'account_id', 'name': 'account_name'}))
 
 def fetch_master_journal(data_dir, chart_of_accounts):
@@ -116,12 +118,12 @@ def _journal_to_statement(journal_like, period_range):
 
 def _get_journal_columns(journal_like):
     return (['type'] + [col for col in journal_like.columns if 'category_' in str(col)] +
-            ['account_id', 'account_name', 'transaction_id', 'date', 'description',
+            ['account_id', 'account_name', 'account_tags', 'transaction_id', 'date', 'description',
              'net_amount', 'debit_amount', 'credit_amount', 'action'])
 
 def _get_statement_columns(statement_like):
     return (['period', 'type'] + [col for col in statement_like.columns if 'category_' in str(col)] +
-            ['account_id', 'account_name', 'transaction_id', 'date', 'description',
+            ['account_id', 'account_name', 'account_tags', 'transaction_id', 'date', 'description',
              'net_amount', 'debit_amount', 'credit_amount', 'action'])
 
 ###############################################################################
@@ -146,10 +148,57 @@ def cash_flow(stmt_data, period_range):
                    (stmt_data['period'] <= period_range[-1])]
 
     report_index = _get_report_index(sd)
-    return (sd[report_index + ['net_amount']]
-            .set_index(report_index, drop=True)
-            .groupby(report_index)
-            .sum())
+    cf_data = (sd[report_index + ['net_amount', 'account_tags']]
+               .set_index(report_index)
+               .sort_index()
+               .groupby(report_index)
+               .agg({'net_amount': sum, 'account_tags': lambda df: df[0]}))
+
+    income_data = cf_data.loc[cf_data.index.get_level_values('type') == 'income']
+    regular_income = income_data.loc[~(income_data['account_tags'].str.contains('tax_deferred|noncash')), 'net_amount']
+    tax_deferred = income_data.loc[income_data['account_tags'].str.contains('tax_deferred'), 'net_amount']
+    noncash_income = income_data.loc[income_data['account_tags'].str.contains('noncash'), 'net_amount']
+
+    income_total = (pd.concat([regular_income, tax_deferred, noncash_income])
+                    .groupby('period')
+                    .sum())
+
+    # REFACTOR: use tags or maybe categories for this instead of hard coding an account name
+    tax_expense = cf_data.loc[cf_data.index.get_level_values('account_name') == 'tax payment', 'net_amount']
+    post_tax_total = income_total - tax_expense.groupby('period').sum()
+
+    expense_data = cf_data.loc[cf_data.index.get_level_values('type') == 'expense']
+    regular_expense = expense_data.loc[~expense_data.index.get_level_values('account_name').str.contains('tax payment|depreciation'), 'net_amount']
+    noncash_expense = expense_data.loc[expense_data['account_tags'].str.contains('noncash', na=False), 'net_amount']
+    expense_total = pd.concat([regular_expense, tax_expense, noncash_expense]).groupby('period').sum()
+
+    net_income = income_total - expense_total
+
+    cashflow = net_income - noncash_income.groupby('period').sum() + noncash_expense.groupby('period').sum()
+
+    liability_data = cf_data.loc[cf_data.index.get_level_values('type') == 'liability', 'net_amount']
+
+    # note: repayment into liability account is a negative net value, so add rather than subtract it here
+    fcf_te = cashflow + liability_data.groupby('period').sum()
+
+    asset_data = cf_data.loc[cf_data.index.get_level_values('type') == 'asset', 'net_amount']
+
+    return SimpleNamespace(**{
+        'cashflow': cashflow,
+        'expense_total': expense_total,
+        'flows_to_assets': asset_data,
+        'flows_to_liability': liability_data,
+        'free_cashflow_to_equity': fcf_te,
+        'income_total': income_total,
+        'net_income': net_income,
+        'noncash_expense': noncash_expense,
+        'noncash_income': noncash_income,
+        'post_tax_total': post_tax_total,
+        'regular_expense': regular_expense,
+        'regular_income': regular_income,
+        'tax_deferred_income': tax_deferred,
+        'tax_expense': tax_expense,
+    })
 
 def balance_sheet(stmt_data, period_range):
 

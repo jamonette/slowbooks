@@ -22,14 +22,25 @@ def run_workbook(data_dir):
     cf = sb.data.cash_flow(sd, period_range)
     bs = sb.data.balance_sheet(sd, period_range)
 
+
     glr = sb.reports.general_ledger(gl)
-    cfr = sb.reports.cash_flow(cf)
+    isr = sb.reports.income_statement(cf)
+    cfr = sb.reports.cashflow_statement(cf)
     bsr = sb.reports.balance_sheet(bs)
 
+
     print(f'''
-    {glr}
+    Income statement
+    ================
+    {isr}
+
+    Cashflow statement
+    ==================
 
     {cfr}
+
+    Balance sheet
+    =============
 
     {bsr}
      ''')

@@ -14,56 +14,104 @@ def general_ledger(journal_by_account):
 
     return ''.join(output)
 
+def income_statement(data):
+
+    return f"""
+Regular income
+{pivot(data.regular_income, 'period')}
+
+
+Tax deferred income
+
+{pivot(data.tax_deferred_income, 'period')}
+
+Noncash income
+
+{pivot(data.noncash_income, 'period')}
+
+Income subtotal
+
+{data.income_total.to_frame().T}
+
+Tax total
+
+{pivot(data.tax_expense, 'period')}
+
+Income net of tax
+
+{data.post_tax_total.to_frame().T}
+
+Regular expenses
+
+{pivot(data.regular_expense, 'period')}
+
+Noncash expenses
+
+{pivot(data.noncash_expense, 'period')}
+
+Expense total
+
+{data.expense_total.to_frame().T}
+
+Net income
+
+{data.net_income.to_frame().T}
+    """
+
+
+def cashflow_statement(data):
+
+    return f"""
+Net income 
+{data.net_income.to_frame().T}
+
+Adjustments for non-cash activity
+---------------------------------
+
+Subtract non-cash income:
+{pivot(data.noncash_income, 'period')}
+
+Add-back non-cash expenses:
+{pivot(data.noncash_expense, 'period')}
+
+Cashflow for period
+===================
+{data.cashflow.to_frame().T}
+
+[TODO: Separate capital expenditure from regular expenses]
+
+Repayment of principal
+[This actually includes interest as well. TODO: separate interest into expense]
+[TODO: counting expenses from CC's twice, since expenses show up on the income statement
+but are subtracted from CF again here]
+{pivot(data.flows_to_liability, 'period')}
+
+Free cashflow to equity
+{data.free_cashflow_to_equity.to_frame().T}
+
+Cash to assets
+{pivot(data.flows_to_assets, 'period')}
+        """
+
 def balance_sheet(bs_data):
 
-    assets = bs_data[bs_data.index.get_level_values('type') == 'asset'].droplevel('type')
-    liability = bs_data[bs_data.index.get_level_values('type') == 'liability'].droplevel('type')
-    equity = bs_data[bs_data.index.get_level_values('type') == 'equity'].droplevel('type')
+    assets = bs_data.loc[bs_data.index.get_level_values('type') == 'asset', 'bs_amount'].droplevel('type')
+    liability = bs_data.loc[bs_data.index.get_level_values('type') == 'liability', 'bs_amount'].droplevel('type')
+    equity = bs_data.loc[bs_data.index.get_level_values('type') == 'equity', 'bs_amount'].droplevel('type')
 
-    return f"""\
-        Assets
+    return f"""
+        Assets:
+
         {pivot(assets, 'period', ['category_0'], row_totals=False)}
 
-        Liability
+        Liability:
+
         {pivot(liability, 'period', ['category_0'], row_totals=False)}
 
-        Equity
-        {pivot(equity, 'period', ['category_0'], row_totals=False)}"""
+        Equity:
 
-
-def cash_flow(cf_data):
-
-    income = cf_data[cf_data.index.get_level_values('type') == 'income'].droplevel('type')
-    expense = cf_data[cf_data.index.get_level_values('type') == 'expense'].droplevel('type')
-    liability = cf_data[cf_data.index.get_level_values('type') == 'liability'].droplevel('type')
-    assets = cf_data[cf_data.index.get_level_values('type') == 'assets'].droplevel('type')
-
-    net_income = (income.groupby('period').sum() - expense.groupby('period').sum()).T
-    free_cf_to_equity = net_income - (-1 * liability.groupby('period').sum().T)
-
-    # sanity check: (FCF to equity - cash flow into assets) should equal zero
-    err = (free_cf_to_equity - assets.groupby('period').sum().T)
-
-    # TODO Net Income / FCFTE calc is erroneous
-
-    return f"""\
-        Income
-        {pivot(income, 'period', ['category_0'])}
-
-        Expense
-        {pivot(expense, 'period',['category_0'])}
-
-        Net Income
-        {net_income}
-
-        Debt service
-        {pivot(liability, 'period', ['category_0'])}
-
-        Free cash flow to equity\n
-        {free_cf_to_equity}
-
-        Error:\n
-        {err}"""
+        {pivot(equity, 'period', ['category_0'], row_totals=False)}
+    """
 
 ###########################################################################
 #### Dataframe utils ######################################################
@@ -71,7 +119,7 @@ def cash_flow(cf_data):
 
 # native pandas pivot can't do subtotals for arbitrary levels
 # within a multilevel index - do that here
-def pivot(df, column, subtotal_lvls, row_totals=True, col_totals=True):
+def pivot(df, column, subtotal_lvls=[], row_totals=True, col_totals=True):
     return (df
             .unstack(column)
             .pipe(with_index_subtotals, subtotal_lvls)
@@ -134,3 +182,4 @@ def as_columns(*inputs, spacing='  |  '):
 
     output = '\n'.join(out_lines)
     return output
+

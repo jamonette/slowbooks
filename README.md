@@ -50,8 +50,8 @@ import pandas as pd
 import slowbooks as sb
 
 data_dir = '/home/billybob/docs/slowbooks-data'
-mj = sb.data.master_journal(data_dir)
-coa = sb.data.chart_of_accounts(data_dir)
+mj = sb.data.fetch_master_journal(data_dir)
+coa = sb.data.fetch_chart_of_accounts(data_dir)
 
 period_range = pd.period_range('20190101', '20200131', freq='M')
 sd = sb.data.statement_data(coa, mj, period_range)
